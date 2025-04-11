@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multiplayer Snake Game</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: #f0f0f0;
+      margin: 0;
+      padding: 20px;
+    }
+    
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+    }
+    
+    #gameContainer {
+      margin-top: 20px;
+    }
+    
+    canvas {
+      background-color: #222;
+      border: 3px solid #333;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    }
+    
+    #gameInfo {
+      margin-top: 20px;
+      background: white;
+      padding: 15px;
+      border-radius: 5px;
+      box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+      width: 500px;
+    }
+    
+    #playerCount {
+      font-weight: bold;
+      color: #4caf50;
+    }
+    
+    #scoreList {
+      list-style-type: none;
+      padding: 0;
+    }
+    
+    #scoreList li {
+      margin: 5px 0;
+      padding: 5px;
+      border-radius: 3px;
+    }
+    
+    .controls {
+      margin-top: 15px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .controls p {
+      margin: 5px 0;
+    }
+    
+    #gameForm {
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: white;
+      padding: 15px;
+      border-radius: 5px;
+      box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+    }
+    
+    input, button {
+      margin: 5px;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    button {
+      background-color: #4caf50;
+      color: white;
+      cursor: pointer;
+      border: none;
+    }
+    
+    button:hover {
+      background-color: #45a049;
+    }
+    
+    .you {
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>Multiplayer Snake Game</h1>
+  
+  <div id="gameForm">
+    <p>Enter a game room code or create a new one:</p>
+    <input type="text" id="gameId" placeholder="Game Room Code" value="default">
+    <p>Enter your username:</p>
+    <input type="text" id="username" placeholder="Username" maxlength="15">
+    <button id="joinGame">Join/Create Game</button>
+  </div>
+  
+  <div id="gameContainer" style="display: none;">
+    <canvas id="gameCanvas" width="500" height="500"></canvas>
+    
+    <div id="gameInfo">
+      <p>Players in room: <span id="playerCount">0</span></p>
+      <p>Scores:</p>
+      <ul id="scoreList"></ul>
+      
+      <div class="controls">
+        <p>Controls: Use arrow keys to change direction</p>
+        <p>Your snake will have a white outline</p>
+      </div>
+    </div>
+  </div>
+  
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Canvas setup
+      const canvas = document.getElementById('gameCanvas');
+      const ctx = canvas.getContext('2d');
+      const gameContainer = document.getElementById('gameContainer');
+      const gameForm = document.getElementById('gameForm');
+      const joinGameBtn = document.getElementById('joinGame');
+      const gameIdInput = document.getElementById('gameId');
+      const playerCountElement = document.getElementById('playerCount');
+      const scoreListElement = document.getElementById('scoreList');
+      
+      // Game constants
+      const GRID_SIZE = 20;
+      const CELL_SIZE = canvas.width / GRID_SIZE;
+      
+      // Socket connection
+      const socket = io();
+      let playerId = null;
+      
+      // Join a game
+      joinGameBtn.addEventListener('click', () => {
+        const gameId = gameIdInput.value.trim() || 'default';
+        const username = document.getElementById('username').value.trim() || null;
+        
+        socket.emit('joinGame', { gameId, username });
+        gameForm.style.display = 'none';
+        gameContainer.style.display = 'block';
+        
+        // Store the player's ID
+        playerId = socket.id;
+      });
+      
+      // Update game state when received from server
+      socket.on('gameState', (gameState) => {
+        renderGame(gameState);
+        updateScores(gameState);
+      });
+      
+      // Player joined notification
+      socket.on('playerJoined', (data) => {
+        playerCountElement.textContent = data.players;
+      });
+      
+      // Player left notification
+      socket.on('playerLeft', (data) => {
+        playerCountElement.textContent = data.players;
+      });
+      
+      // Handle keyboard input
+      document.addEventListener('keydown', (event) => {
+        let direction = null;
+        
+        switch (event.key) {
+          case 'ArrowUp':
+            direction = 'up';
+            event.preventDefault();
+            break;
+          case 'ArrowDown':
+            direction = 'down';
+            event.preventDefault();
+            break;
+          case 'ArrowLeft':
+            direction = 'left';
+            event.preventDefault();
+            break;
+          case 'ArrowRight':
+            direction = 'right';
+            event.preventDefault();
+            break;
+        }
+        
+        if (direction) {
+          socket.emit('changeDirection', direction);
+        }
+      });
+      
+      // Render the game
+      function renderGame(gameState) {
+        // Clear the canvas
+        ctx.fillStyle = '#222';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw grid lines (optional)
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 0.5;
+        
+        // Draw vertical grid lines
+        for (let i = 0; i <= GRID_SIZE; i++) {
+          ctx.beginPath();
+          ctx.moveTo(i * CELL_SIZE, 0);
+          ctx.lineTo(i * CELL_SIZE, canvas.height);
+          ctx.stroke();
+        }
+        
+        // Draw horizontal grid lines
+        for (let i = 0; i <= GRID_SIZE; i++) {
+          ctx.beginPath();
+          ctx.moveTo(0, i * CELL_SIZE);
+          ctx.lineTo(canvas.width, i * CELL_SIZE);
+          ctx.stroke();
+        }
+        
+        // Draw food
+        ctx.fillStyle = '#ff0000';
+        ctx.beginPath();
+        ctx.arc(
+          (gameState.food.x + 0.5) * CELL_SIZE,
+          (gameState.food.y + 0.5) * CELL_SIZE,
+          CELL_SIZE / 2.5,
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+        
+        // Draw all snakes
+        for (const id in gameState.players) {
+          const player = gameState.players[id];
+          const snake = player.snake;
+          
+          // Draw snake body
+          ctx.fillStyle = player.color;
+          
+          for (let i = 0; i < snake.length; i++) {
+            const segment = snake[i];
+            
+            ctx.fillRect(
+              segment.x * CELL_SIZE,
+              segment.y * CELL_SIZE,
+              CELL_SIZE,
+              CELL_SIZE
+            );
+            
+            // Add white outline for the current player's snake
+            if (id === playerId) {
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 2;
+              ctx.strokeRect(
+                segment.x * CELL_SIZE,
+                segment.y * CELL_SIZE,
+                CELL_SIZE,
+                CELL_SIZE
+              );
+            }
+          }
+          
+          // Draw eyes on the head for better visibility
+          const head = snake[0];
+          ctx.fillStyle = '#000';
+          
+          // Left eye
+          ctx.beginPath();
+          ctx.arc(
+            (head.x + 0.3) * CELL_SIZE,
+            (head.y + 0.3) * CELL_SIZE,
+            CELL_SIZE / 10,
+            0,
+            Math.PI * 2
+          );
+          ctx.fill();
+          
+          // Right eye
+          ctx.beginPath();
+          ctx.arc(
+            (head.x + 0.7) * CELL_SIZE,
+            (head.y + 0.3) * CELL_SIZE,
+            CELL_SIZE / 10,
+            0,
+            Math.PI * 2
+          );
+          ctx.fill();
+        }
+      }
+      
+      // Update the score list
+      function updateScores(gameState) {
+        scoreListElement.innerHTML = '';
+        
+        if (!gameState.players) return;
+        
+        const playerScores = Object.entries(gameState.players).map(([id, player]) => ({
+          id,
+          score: player.score,
+          color: player.color,
+          username: player.username
+        })).sort((a, b) => b.score - a.score);
+        
+        playerScores.forEach(player => {
+          const li = document.createElement('li');
+          li.style.backgroundColor = `${player.color}33`; // Add transparency to color
+          li.style.border = `2px solid ${player.color}`;
+          
+          if (player.id === playerId) {
+            li.classList.add('you');
+            li.textContent = `You (${player.username}): ${player.score} points`;
+          } else {
+            li.textContent = `${player.username}: ${player.score} points`;
+          }
+          
+          scoreListElement.appendChild(li);
+        });
+      }
+    });
+  </script>
+</body>
+</html>

@@ -55,6 +55,20 @@
       border-radius: 3px;
     }
     
+    .foodLegend {
+      margin-top: 15px;
+      margin-bottom: 15px;
+      padding: 10px;
+      background-color: #f8f8f8;
+      border-radius: 5px;
+      box-shadow: 0 0 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    #foodList {
+      list-style-type: none;
+      padding: 0;
+    }
+    
     .controls {
       margin-top: 15px;
       display: flex;
@@ -119,6 +133,11 @@
       <p>Scores:</p>
       <ul id="scoreList"></ul>
       
+      <div class="foodLegend">
+        <p>Food Types:</p>
+        <ul id="foodList"></ul>
+      </div>
+      
       <div class="controls">
         <p>Controls: Use arrow keys to change direction</p>
         <p>Your snake will have a white outline</p>
@@ -164,6 +183,7 @@
       socket.on('gameState', (gameState) => {
         renderGame(gameState);
         updateScores(gameState);
+        updateFoodLegend(gameState.foodTypes);
       });
       
       // Player joined notification
@@ -230,17 +250,21 @@
           ctx.stroke();
         }
         
-        // Draw food
-        ctx.fillStyle = '#ff0000';
-        ctx.beginPath();
-        ctx.arc(
-          (gameState.food.x + 0.5) * CELL_SIZE,
-          (gameState.food.y + 0.5) * CELL_SIZE,
-          CELL_SIZE / 2.5,
-          0,
-          Math.PI * 2
-        );
-        ctx.fill();
+        // Draw all food items
+        if (gameState.foodItems) {
+          gameState.foodItems.forEach(food => {
+            ctx.fillStyle = food.color;
+            ctx.beginPath();
+            ctx.arc(
+              (food.x + 0.5) * CELL_SIZE,
+              (food.y + 0.5) * CELL_SIZE,
+              CELL_SIZE / 2.5,
+              0,
+              Math.PI * 2
+            );
+            ctx.fill();
+          });
+        }
         
         // Draw all snakes
         for (const id in gameState.players) {
@@ -327,6 +351,38 @@
           }
           
           scoreListElement.appendChild(li);
+        });
+      }
+      
+      // Update the food legend
+      function updateFoodLegend(foodTypes) {
+        if (!foodTypes) return;
+        
+        const foodListElement = document.getElementById('foodList');
+        foodListElement.innerHTML = '';
+        
+        foodTypes.forEach(food => {
+          const li = document.createElement('li');
+          li.style.display = 'flex';
+          li.style.alignItems = 'center';
+          li.style.margin = '5px 0';
+          
+          // Create color square
+          const colorSquare = document.createElement('div');
+          colorSquare.style.width = '15px';
+          colorSquare.style.height = '15px';
+          colorSquare.style.backgroundColor = food.color;
+          colorSquare.style.marginRight = '10px';
+          colorSquare.style.borderRadius = '3px';
+          
+          // Create text description
+          const text = document.createElement('span');
+          const pointsText = food.points > 0 ? `+${food.points}` : food.points;
+          text.textContent = `${food.name}: ${pointsText} points`;
+          
+          li.appendChild(colorSquare);
+          li.appendChild(text);
+          foodListElement.appendChild(li);
         });
       }
     });

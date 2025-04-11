@@ -17,12 +17,26 @@ const INITIAL_SNAKE_LENGTH = 3;
 // Games storage
 const games = {};
 
+// Food types with their colors and point values
+const FOOD_TYPES = [
+  { color: '#ff0000', points: -10, name: 'Rotten Apple' },  // Red (negative points)
+  { color: '#00ff00', points: 10, name: 'Green Apple' },    // Green (small points)
+  { color: '#0000ff', points: 20, name: 'Blueberry' },      // Blue (medium points)
+  { color: '#ffff00', points: 30, name: 'Banana' },         // Yellow (large points)
+  { color: '#ff00ff', points: 50, name: 'Dragon Fruit' }    // Purple (huge points)
+];
+
 // Generate random position on the grid
 function generateRandomPosition() {
   return {
     x: Math.floor(Math.random() * GRID_SIZE),
     y: Math.floor(Math.random() * GRID_SIZE)
   };
+}
+
+// Generate random food type
+function getRandomFoodType() {
+  return FOOD_TYPES[Math.floor(Math.random() * FOOD_TYPES.length)];
 }
 
 // Check if position is occupied by any snake
@@ -37,7 +51,7 @@ function isPositionOccupied(position, snakes) {
   return false;
 }
 
-// Generate a position for food that doesn't overlap with any snake
+// Generate a position for food that doesn't overlap with any snake or existing food
 function generateFood(gameId) {
   const position = generateRandomPosition();
   
@@ -46,9 +60,26 @@ function generateFood(gameId) {
     if (isPositionOccupied(position, games[gameId].players)) {
       return generateFood(gameId); // Try again if position is occupied
     }
+    
+    // Check if position conflicts with any existing food
+    if (games[gameId].foodItems) {
+      for (const food of games[gameId].foodItems) {
+        if (food.x === position.x && food.y === position.y) {
+          return generateFood(gameId); // Try again if position conflicts with existing food
+        }
+      }
+    }
   }
   
-  return position;
+  // Create a new food item with position and random type
+  const foodType = getRandomFoodType();
+  return {
+    x: position.x,
+    y: position.y,
+    color: foodType.color,
+    points: foodType.points,
+    name: foodType.name
+  };
 }
 
 // Create a new snake for a player
@@ -79,8 +110,9 @@ function createPlayer(username) {
 function createGameRoom(gameId) {
   games[gameId] = {
     players: {},
-    food: generateRandomPosition(),
-    active: false
+    foodItems: [generateFood(gameId), generateFood(gameId), generateFood(gameId)], // Start with 3 food items
+    active: false,
+    maxFood: 5 // Maximum number of food items in game at once
   };
   return games[gameId];
 }
@@ -108,15 +140,31 @@ function updateGame(gameId) {
       case 'right': head.x = (head.x + 1) % GRID_SIZE; break;
     }
     
-    // Check if snake eats food
-    if (head.x === game.food.x && head.y === game.food.y) {
-      // Add new head (grow)
-      snake.unshift(head);
-      // Increase score
-      player.score += 10;
-      // Generate new food
-      game.food = generateFood(gameId);
-    } else {
+    // Check if snake eats any food
+    let foodEaten = false;
+    for (let i = 0; i < game.foodItems.length; i++) {
+      const food = game.foodItems[i];
+      if (head.x === food.x && head.y === food.y) {
+        // Add new head (grow)
+        snake.unshift(head);
+        
+        // Adjust score based on food type
+        player.score += food.points;
+        
+        // Replace the eaten food with a new one
+        game.foodItems[i] = generateFood(gameId);
+        
+        // Occasionally add another food item if below max
+        if (game.foodItems.length < game.maxFood && Math.random() < 0.3) {
+          game.foodItems.push(generateFood(gameId));
+        }
+        
+        foodEaten = true;
+        break;
+      }
+    }
+    
+    if (!foodEaten) {
       // Regular move (add head, remove tail)
       snake.unshift(head);
       snake.pop();
@@ -161,7 +209,8 @@ function sendGameState(gameId) {
   
   // Create a clean copy of game data without circular references
   const gameState = {
-    food: game.food,
+    foodItems: [...game.foodItems], // All food items with their properties
+    foodTypes: FOOD_TYPES, // Send food type information for the legend
     players: {}
   };
   
